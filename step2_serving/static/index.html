@@ -3,51 +3,155 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Image Classifier</title>
+  <title>Face Recognition Demo</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 560px; margin: 40px auto; padding: 0 16px; color: #222; }
-    h1 { font-size: 1.4rem; }
-    #preview { max-width: 100%; max-height: 320px; margin: 16px 0; border-radius: 8px; display: none; }
+    :root { --accent: #2563eb; --known: #16a34a; --unknown: #dc2626; --muted: #6b7280; --line: #e5e7eb; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 32px auto; padding: 0 16px; color: #1f2937; background: #fff; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .subtitle { color: var(--muted); margin-top: 0; }
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 24px 0 16px; }
+    .tab { border: none; background: none; padding: 10px 14px; font: inherit; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .hint { color: var(--muted); font-size: 0.9rem; }
+    .upload { display: inline-block; padding: 10px 16px; background: var(--accent); color: #fff; border-radius: 6px; cursor: pointer; }
+    .upload input { display: none; }
+    /* The stage is exactly as big as the image, so face boxes positioned in % line up. */
+    .stage { position: relative; margin: 16px 0; width: fit-content; }
+    .stage img { display: block; max-width: 100%; border-radius: 8px; }
+    .box { position: absolute; border: 3px solid var(--known); border-radius: 4px; }
+    .box.unknown { border-color: var(--unknown); }
+    .box span { position: absolute; top: 100%; left: -3px; z-index: 1; margin-top: 2px; white-space: nowrap; font-size: 0.8rem; font-weight: 600; color: #fff; background: var(--known); padding: 2px 6px; border-radius: 4px; }
+    .box.unknown span { background: var(--unknown); }
     .row { margin: 10px 0; }
-    .bar { height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; margin-top: 4px; }
-    .fill { height: 100%; background: #2563eb; }
-    .error { color: #b91c1c; }
+    .bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; margin-top: 4px; }
+    .fill { height: 100%; background: var(--accent); }
+    .error { color: var(--unknown); }
+    details { margin-top: 12px; }
+    #people { columns: 2; font-size: 0.85rem; color: var(--muted); padding-left: 18px; }
+    footer { margin-top: 40px; font-size: 0.8rem; color: var(--muted); }
+    footer a { color: inherit; }
   </style>
 </head>
 <body>
-  <h1>Image Classifier (ResNet-50)</h1>
-  <p>Upload a photo and the model will guess what's in it, out of 1000 ImageNet categories.</p>
-  <input type="file" id="file" accept="image/*">
-  <img id="preview" alt="">
+  <h1>Face Recognition Demo</h1>
+  <p class="subtitle">PyTorch models served with FastAPI on Google Cloud Run</p>
+
+  <div class="tabs">
+    <button class="tab active" data-mode="faces">Recognize faces</button>
+    <button class="tab" data-mode="objects">Classify objects</button>
+  </div>
+
+  <div id="faces-help">
+    <p class="hint">Upload a photo with people in it. Faces are detected and aligned with MTCNN, embedded with
+      FaceNet, and matched against 158 public figures from the LFW dataset. Anyone else is labeled
+      <strong style="color: var(--unknown)">Unknown</strong>.</p>
+    <details>
+      <summary class="hint">Who can it recognize?</summary>
+      <ul id="people"></ul>
+    </details>
+  </div>
+  <p id="objects-help" class="hint" hidden>Upload a photo and a ResNet-50 trained on ImageNet will guess what's in
+    it, out of 1000 categories.</p>
+
+  <p><label class="upload">Choose a photo<input type="file" id="file" accept="image/*"></label></p>
+  <p class="hint">Photos are processed in memory and never stored.</p>
+
+  <div class="stage" id="stage" hidden><img id="preview" alt="Uploaded photo"></div>
   <div id="results"></div>
 
+  <footer>Source code: <a href="https://github.com/QQ1033/face-recognition-from-scratch">github.com/QQ1033/face-recognition-from-scratch</a></footer>
+
   <script>
+    let mode = "faces";
     const fileInput = document.getElementById("file");
+    const stage = document.getElementById("stage");
     const preview = document.getElementById("preview");
     const results = document.getElementById("results");
 
-    fileInput.addEventListener("change", async () => {
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function clearResults() {
+      stage.querySelectorAll(".box").forEach(b => b.remove());
+      results.innerHTML = "";
+    }
+
+    document.querySelectorAll(".tab").forEach(tab => tab.addEventListener("click", () => {
+      mode = tab.dataset.mode;
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t === tab));
+      document.getElementById("faces-help").hidden = mode !== "faces";
+      document.getElementById("objects-help").hidden = mode !== "objects";
+      clearResults();
+      if (fileInput.files[0]) analyze(fileInput.files[0]);
+    }));
+
+    fetch("/people").then(r => r.json()).then(names => {
+      document.getElementById("people").innerHTML = names.map(n => `<li>${escapeHtml(n)}</li>`).join("");
+    });
+
+    // Fit the photo to the page width (scaling small photos up too) without
+    // letting tall photos grow taller than 520 px.
+    preview.addEventListener("load", () => {
+      const scale = Math.min(results.clientWidth / preview.naturalWidth, 520 / preview.naturalHeight);
+      preview.style.width = `${Math.round(preview.naturalWidth * scale)}px`;
+    });
+
+    fileInput.addEventListener("change", () => {
       const file = fileInput.files[0];
       if (!file) return;
       preview.src = URL.createObjectURL(file);
-      preview.style.display = "block";
-      results.textContent = "Classifying...";
+      stage.hidden = false;
+      analyze(file);
+    });
 
+    async function analyze(file) {
+      clearResults();
+      results.textContent = mode === "faces" ? "Looking for faces..." : "Classifying...";
       const form = new FormData();
       form.append("file", file);
-      const response = await fetch("/predict", { method: "POST", body: form });
+      const response = await fetch(mode === "faces" ? "/recognize" : "/predict", { method: "POST", body: form });
       const body = await response.json();
-
+      results.innerHTML = "";
       if (!response.ok) {
-        results.innerHTML = `<p class="error">${body.detail}</p>`;
+        results.innerHTML = `<p class="error">${escapeHtml(body.detail)}</p>`;
         return;
       }
+      mode === "faces" ? showFaces(body) : showObjects(body);
+    }
+
+    function showFaces(body) {
+      if (body.faces.length === 0) {
+        results.innerHTML = "<p>No faces found.</p>";
+        return;
+      }
+      // Boxes are in original-image pixels; convert to percentages so they line up
+      // with the image however large it is displayed.
+      for (const face of body.faces) {
+        const [x1, y1, x2, y2] = face.box;
+        const box = document.createElement("div");
+        box.className = "box" + (face.name === "Unknown" ? " unknown" : "");
+        box.style.left = `${100 * x1 / body.width}%`;
+        box.style.top = `${100 * y1 / body.height}%`;
+        box.style.width = `${100 * (x2 - x1) / body.width}%`;
+        box.style.height = `${100 * (y2 - y1) / body.height}%`;
+        box.innerHTML = `<span>${escapeHtml(face.name)} ${(face.confidence * 100).toFixed(0)}%</span>`;
+        stage.appendChild(box);
+      }
+      const known = body.faces.filter(f => f.name !== "Unknown").length;
+      results.innerHTML = `<p>Found ${body.faces.length} face${body.faces.length === 1 ? "" : "s"}, recognized ${known}.</p>`;
+    }
+
+    function showObjects(body) {
       results.innerHTML = body.predictions.map(p => `
         <div class="row">
-          <strong>${p.label}</strong> - ${(p.probability * 100).toFixed(1)}%
+          <strong>${escapeHtml(p.label)}</strong> - ${(p.probability * 100).toFixed(1)}%
           <div class="bar"><div class="fill" style="width:${p.probability * 100}%"></div></div>
         </div>`).join("");
-    });
+    }
   </script>
 </body>
 </html>

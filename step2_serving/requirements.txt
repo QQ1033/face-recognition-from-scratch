@@ -1,6 +1,13 @@
 # Runtime dependencies for the serving container (torch/torchvision are installed
-# separately in the Dockerfile from the CPU-only index).
+# separately in the Dockerfile from the CPU-only index, and facenet-pytorch with
+# --no-deps because its pins predate PyTorch 2.11 / NumPy 2).
 fastapi==0.142.2
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
 pillow==12.3.0
+
+# Face recognition (step 3). scikit-learn must match the version that trained the
+# classifier, or loading the saved model can fail.
+scikit-learn==1.9.1
+requests==2.34.2
+tqdm==4.70.1

@@ -8,7 +8,7 @@ from torchvision with its matching preprocessing.
 import io
 
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision.models import ResNet50_Weights, resnet50
 
 
@@ -28,7 +28,7 @@ class ImageClassifier:
 
         Raises PIL.UnidentifiedImageError if the bytes are not a readable image.
         """
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes))).convert("RGB")
         batch = self.preprocess(image).unsqueeze(0).to(self.device)  # model expects a batch: 1x3x224x224
 
         probabilities = self.model(batch).softmax(dim=1)[0]
