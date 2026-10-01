@@ -1,0 +1,5 @@
+# Install PyTorch with CUDA first (RTX 50-series needs CUDA 12.8+ builds):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+torch==2.11.0
+torchvision==0.26.0
+tensorboard==2.21.0
