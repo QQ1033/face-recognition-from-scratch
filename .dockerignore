@@ -1,0 +1,6 @@
+.venv/
+.git/
+data/
+checkpoints/
+runs/
+**/__pycache__/

@@ -1,0 +1,6 @@
+# Runtime dependencies for the serving container (torch/torchvision are installed
+# separately in the Dockerfile from the CPU-only index).
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pillow==12.3.0
