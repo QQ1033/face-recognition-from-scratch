@@ -47,6 +47,10 @@ A ResNet-50 pre-trained on ImageNet (1000 classes), served by FastAPI and
 packaged with Docker. Replaces the original's Keras Inception V3 + Flask +
 Gunicorn/Nginx/Supervisor + App Engine setup.
 
+**Live demo:** https://image-classifier-259328248441.us-central1.run.app
+(deployed on Google Cloud Run; scales to zero, so the first request after idle
+may take 10-20 s to start up)
+
 | Endpoint | Description |
 |---|---|
 | `GET /` | Upload page: pick a photo, see the top predictions |
@@ -66,6 +70,16 @@ Run in Docker (CPU-only image, weights baked in, runs as non-root):
 ```powershell
 docker build -t image-classifier -f step2_serving/Dockerfile .
 docker run --rm -p 8000:8000 image-classifier
+```
+
+Deploy to Google Cloud Run (image pushed to Artifact Registry):
+
+```powershell
+$IMG = "us-central1-docker.pkg.dev/PROJECT_ID/face-recognition/image-classifier:v1"
+docker tag image-classifier $IMG
+docker push $IMG
+gcloud run deploy image-classifier --image $IMG --region us-central1 --port 8000 `
+    --memory 2Gi --cpu 1 --min-instances 0 --max-instances 2
 ```
 
 Call the API directly:
