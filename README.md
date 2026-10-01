@@ -8,7 +8,7 @@ on a current PyTorch stack.
 |------|--------|----------------|--------|
 | 1 | `step1_cnn/` | CNN fundamentals: build and train a CNN on MNIST, CPU vs GPU | Done |
 | 2 | `step2_serving/` | Serve a pre-trained image classifier behind a REST API in Docker | Done |
-| 3 | `step3_face_recognition/` | Face detection + alignment, FaceNet embeddings, SVM classifier | Planned |
+| 3 | `step3_face_recognition/` | Face detection + alignment, FaceNet embeddings, identity classifier | Done |
 
 ## Setup
 
@@ -87,3 +87,45 @@ Call the API directly:
 ```powershell
 curl.exe -F "file=@cat.jpg" "http://localhost:8000/predict?top_k=3"
 ```
+
+## Step 3: Facial Recognition Pipeline
+
+Recognizes 158 people from the LFW (Labeled Faces in the Wild) dataset. Replaces
+the original's dlib + TensorFlow 1 FaceNet + SVM pipeline with MTCNN +
+FaceNet in PyTorch (`facenet-pytorch`).
+
+| Stage | Script | What it does |
+|---|---|---|
+| 0 | `download_lfw.py` | Downloads LFW: 13,233 photos of 5,749 people |
+| 1 | `preprocess.py` | MTCNN detects faces + 5 landmarks; rotates so the eyes are level; crops 160x160 |
+| 2 | `embed.py` | FaceNet (Inception-ResNet V1, trained on VGGFace2) maps each face to a 512-d vector |
+| 3 | `train_classifier.py` | Logistic regression on the embeddings of people with 10+ photos |
+| 4 | `predict.py` | Finds, boxes, and names every face in a new photo; low-confidence faces are "Unknown" |
+
+```powershell
+pip install facenet-pytorch --no-deps     # its pins predate PyTorch 2.11 / NumPy 2
+python -m step3_face_recognition.download_lfw
+python -m step3_face_recognition.preprocess        # ~4 min on RTX 5070
+python -m step3_face_recognition.embed             # ~1.5 min
+python -m step3_face_recognition.train_classifier
+python -m step3_face_recognition.predict photo.jpg # writes photo_recognized.jpg
+```
+
+Results (158 people, 4,324 photos):
+
+| | |
+|---|---|
+| Test accuracy (80/20 split) | **100%** (865/865) |
+| 5-fold cross-validation | **99.88%** (5 errors in 4,324) |
+| Original tutorial | 90.8% |
+
+### Debugging story: the "largest face" bug
+
+The first run scored 98.3%. Viewing the misclassified photos showed the classifier
+wasn't the problem: every error inspected was a crop of the *wrong person*. LFW photos often
+contain bystanders, and picking the largest detected face sometimes picked them,
+especially faces cut off by the frame, whose bounding boxes extend past the
+image edge and look bigger than they are. Since LFW centers each photo on its
+labeled person, preprocessing now keeps the face closest to the center and
+measures box area clipped to the image. Accuracy went from 98.3% to 99.9%.
+Batching MTCNN detection in the same change cut preprocessing from 19 to 4 minutes.

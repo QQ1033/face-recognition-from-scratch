@@ -7,6 +7,13 @@ tensorboard==2.21.0
 # Step 2: serving
 -r step2_serving/requirements.txt
 
+# Step 3: face recognition
+# facenet-pytorch pins torch<2.3 and numpy<2, but works with newer versions:
+#   pip install facenet-pytorch==2.6.0 --no-deps
+scikit-learn==1.9.1
+tqdm==4.70.1
+requests==2.34.2
+
 # Tests
 pytest==9.1.1
 httpx==0.28.1
