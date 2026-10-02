@@ -1,4 +1,4 @@
-# Facial Recognition from Scratch
+# Facial Recognition Pipeline
 
 A three-step deep learning project that builds up to a working facial recognition
 system. It modernizes Cole Murray's 2017 series (TensorFlow 1 / Keras)
