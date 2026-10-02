@@ -1,7 +1,7 @@
 # Facial Recognition from Scratch
 
 A three-step deep learning project that builds up to a working facial recognition
-system. It modernizes Cole Murray's 2017 tutorial series (TensorFlow 1 / Keras)
+system. It modernizes Cole Murray's 2017 series (TensorFlow 1 / Keras)
 on a current PyTorch stack.
 
 | Step | Folder | What it covers | Status |
